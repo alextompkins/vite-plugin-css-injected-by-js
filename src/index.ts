@@ -2,17 +2,22 @@ import { Plugin, ResolvedConfig } from 'vite';
 import { OutputAsset, OutputChunk } from 'rollup';
 import { buildCSSInjectionCode, removeLinkStyleSheets } from './utils.js';
 
+interface CssInjectedByJsPluginOptions {
+    topExecutionPriority?: boolean;
+    styleId?: string;
+    shouldInjectInto?: (chunkName: string) => boolean;
+}
+
 /**
  * Inject the CSS compiled with JS.
  *
  * @return {Plugin}
  */
-export default function cssInjectedByJsPlugin(
-    { topExecutionPriority, styleId }: { topExecutionPriority?: boolean; styleId?: string } | undefined = {
-        topExecutionPriority: true,
-        styleId: '',
-    }
-): Plugin {
+export default function cssInjectedByJsPlugin({
+    topExecutionPriority = true,
+    styleId = '',
+    shouldInjectInto,
+}: CssInjectedByJsPluginOptions): Plugin {
     //Globally so we can add it to legacy and non-legacy bundle.
     let cssToInject: string = '';
     let config: ResolvedConfig;
@@ -62,13 +67,16 @@ export default function cssInjectedByJsPlugin(
                 });
             }
 
-            const jsAsset = bundle[jsAssets[0]] as OutputChunk;
+            const injectInto = shouldInjectInto ? jsAssets.filter(shouldInjectInto) : jsAssets[0];
+            for (const chunkName of injectInto) {
+                const jsAsset = bundle[chunkName] as OutputChunk;
 
-            const cssInjectionCode = await buildCSSInjectionCode(cssToInject, styleId);
-            const appCode = jsAsset.code;
-            jsAsset.code = topExecutionPriority ? '' : appCode;
-            jsAsset.code += cssInjectionCode ? cssInjectionCode.code : '';
-            jsAsset.code += !topExecutionPriority ? '' : appCode;
+                const cssInjectionCode = await buildCSSInjectionCode(cssToInject, styleId);
+                const appCode = jsAsset.code;
+                jsAsset.code = topExecutionPriority ? '' : appCode;
+                jsAsset.code += cssInjectionCode ? cssInjectionCode.code : '';
+                jsAsset.code += !topExecutionPriority ? '' : appCode;
+            }
         },
     };
 }
